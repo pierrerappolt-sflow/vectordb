@@ -1,5 +1,3 @@
-"""Infrastructure service implementations."""
+"""Infrastructure service implementations (none)."""
 
-from .in_memory_embedding_service import InMemoryEmbeddingService
-
-__all__ = ["InMemoryEmbeddingService"]
+__all__: list[str] = []

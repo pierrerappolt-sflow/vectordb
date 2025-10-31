@@ -18,7 +18,6 @@ from vdb_core.infrastructure.config import AppConfig, load_config_or_default
 from vdb_core.infrastructure.factories import InfrastructureFactory
 from vdb_core.infrastructure.parsers import CompositeParser, ModalityDetector, TextParser
 from vdb_core.infrastructure.repositories import InMemoryEmbeddingReadRepository
-from vdb_core.infrastructure.services import InMemoryEmbeddingService
 from vdb_core.infrastructure.vector_index import VectorIndexManager
 
 from .application_container import ApplicationContainer
@@ -245,14 +244,6 @@ class DIContainer(BaseContainer):
             # document_fragment_read_repository_factory=...,
             # query_read_repository_factory=...,
         )
-
-    def get_embedding_service(self):  # type: ignore[no-untyped-def]
-        """Get the Embedding Service (singleton)."""
-
-        def factory_fn():  # type: ignore[no-untyped-def]
-            return InMemoryEmbeddingService()
-
-        return self._get_or_create("embedding_service", factory_fn)
 
     def get_vector_repository(self) -> IEmbeddingReadRepository:
         """Get the Vector Repository (singleton).
