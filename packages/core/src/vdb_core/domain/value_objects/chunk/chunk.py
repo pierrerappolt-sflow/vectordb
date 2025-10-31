@@ -1,8 +1,4 @@
-"""Chunk value object - immutable content fragment within a Document.
-
-Chunks are deduplicated within a library based on content hash.
-Multiple documents can reference the same chunk.
-"""
+"""Chunk value object."""
 
 from __future__ import annotations
 
@@ -24,18 +20,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True)
 class Chunk:
-    """Immutable chunk content - scoped to document and chunking strategy.
-
-    Chunks are value objects defined by their content, document, and strategy.
-    The same content can be chunked differently by different strategies or
-    appear in different documents.
-
-    Natural composite key: (document_id, chunking_strategy_id, content_hash)
-
-    Supports multiple modalities:
-    - TEXT: content is str
-    - IMAGE: content is bytes (JPEG/PNG/WebP)
-    """
+    """Immutable chunk content."""
 
     library_id: LibraryId
     document_id: UUID
@@ -47,12 +32,10 @@ class Chunk:
 
     def __post_init__(self) -> None:
         """Validate chunk invariants."""
-        # Content type must match modality
         if self.modality.value == ModalityTypeEnum.TEXT:
             if not isinstance(self.content, str):
                 msg = f"TEXT modality requires str content, got {type(self.content)}"
                 raise TypeError(msg)
-        # IMAGE uses bytes
         elif not isinstance(self.content, bytes):
             msg = f"{self.modality.value} modality requires bytes content, got {type(self.content)}"
             raise TypeError(msg)
@@ -69,15 +52,7 @@ class Chunk:
 
     @property
     def text_content(self) -> str:
-        """Get content as text (only valid for TEXT modality).
-
-        Returns:
-            Text content
-
-        Raises:
-            TypeError: If modality is not TEXT
-
-        """
+        """Get content as text (TEXT modality)."""
         if self.modality.value != ModalityTypeEnum.TEXT:
             msg = f"Cannot get text_content for {self.modality.value} modality"
             raise TypeError(msg)
@@ -85,28 +60,13 @@ class Chunk:
 
     @property
     def binary_content(self) -> bytes:
-        """Get content as bytes (for IMAGE modality).
-
-        Returns:
-            Binary content
-
-        Raises:
-            TypeError: If modality is TEXT
-
-        """
+        """Get content as bytes (non-TEXT)."""
         if self.modality.value == ModalityTypeEnum.TEXT:
             msg = "Cannot get binary_content for TEXT modality"
             raise TypeError(msg)
-        # After check, content must be bytes (not str)
         assert isinstance(self.content, bytes)
         return self.content
 
     def to_embedding_format(self) -> str | bytes:
-        """Convert content to format suitable for embedding models.
-
-        Returns:
-            - TEXT: str (the text itself)
-            - IMAGE: bytes (will be base64-encoded by embedding service)
-
-        """
+        """Return content for embedding models."""
         return self.content
