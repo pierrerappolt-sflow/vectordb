@@ -24,11 +24,11 @@ COPY pyproject.toml uv.lock ./
 COPY packages/core/pyproject.toml ./packages/core/
 COPY apps/api/pyproject.toml ./apps/api/
 COPY apps/worker/pyproject.toml ./apps/worker/
-COPY apps/search-service/pyproject.toml ./apps/search-service/
 
 # Copy source code so editable workspace packages have their files (e.g., README.md)
 COPY packages/ ./packages/
-COPY apps/ ./apps/
+COPY apps/api/ ./apps/api/
+COPY apps/worker/ ./apps/worker/
 
 # Install dependencies using uv (no cache mount for clean build)
 RUN uv sync --frozen --no-dev
