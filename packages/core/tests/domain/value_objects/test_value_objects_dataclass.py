@@ -1,0 +1,127 @@
+from __future__ import annotations
+
+from uuid import uuid4
+
+import pytest
+
+from vdb_core.domain.exceptions import ValidationException
+from vdb_core.domain.value_objects import (
+    Chunk,
+    ChunkId,
+    ContentHash,
+    Embedding,
+    EmbeddingId,
+    ModalityType,
+    ModalityTypeEnum,
+)
+from vdb_core.domain.value_objects.config import EmbeddingConfig, EmbeddingProvider
+from vdb_core.domain.value_objects.strategy import EmbeddingStrategyId
+from vdb_core.domain.value_objects.library import LibraryId
+from vdb_core.domain.value_objects.document import DocumentFragmentId
+
+
+def test_chunk_text_validation_and_id():
+    library_id: LibraryId = uuid4()
+
+    chunk = Chunk(
+        library_id=library_id,
+        modality=ModalityType(ModalityTypeEnum.TEXT),
+        content="Hello world",
+        chunking_strategy_id=None,  # type: ignore[arg-type]
+        content_hash=ContentHash.from_content("Hello world"),
+    )
+
+    # modality TEXT requires str and produces a deterministic id
+    assert isinstance(chunk.chunk_id, ChunkId)
+    same = Chunk(
+        library_id=library_id,
+        modality=ModalityType(ModalityTypeEnum.TEXT),
+        content="Hello world",
+        chunking_strategy_id=None,  # type: ignore[arg-type]
+        content_hash=ContentHash.from_content("Hello world"),
+    )
+    assert chunk == same
+    assert chunk.chunk_id == same.chunk_id
+
+
+def test_chunk_binary_validation():
+    library_id: LibraryId = uuid4()
+
+    # Non-TEXT must be bytes
+    with pytest.raises(TypeError):
+        Chunk(
+            library_id=library_id,
+            modality=ModalityType(ModalityTypeEnum.IMAGE),
+            content="not-bytes",  # type: ignore[arg-type]
+            chunking_strategy_id=None,  # type: ignore[arg-type]
+            content_hash=ContentHash.from_content("x"),
+        )
+
+    img = Chunk(
+        library_id=library_id,
+        modality=ModalityType(ModalityTypeEnum.IMAGE),
+        content=b"\xff\xd8\xff\xdb",
+        chunking_strategy_id=None,  # type: ignore[arg-type]
+        content_hash=ContentHash.from_bytes(b"\xff\xd8\xff\xdb"),
+    )
+    assert isinstance(img.binary_content, bytes)
+
+
+def test_embedding_validation_properties():
+    library_id: LibraryId = uuid4()
+    strategy_id: EmbeddingStrategyId = EmbeddingStrategyId(uuid4())
+
+    chunk = Chunk(
+        library_id=library_id,
+        modality=ModalityType(ModalityTypeEnum.TEXT),
+        content="abc",
+        chunking_strategy_id=None,  # type: ignore[arg-type]
+        content_hash=ContentHash.from_content("abc"),
+    )
+
+    with pytest.raises(ValidationException):
+        Embedding(
+            chunk_id=chunk.chunk_id,
+            embedding_strategy_id=strategy_id,
+            vector=tuple(),
+            library_id=library_id,
+            vectorization_config_id=None,  # type: ignore[arg-type]
+        )
+
+    emb = Embedding(
+        chunk_id=chunk.chunk_id,
+        embedding_strategy_id=strategy_id,
+        vector=(0.1, 0.2, 0.3),
+        library_id=library_id,
+        vectorization_config_id=None,  # type: ignore[arg-type]
+    )
+    assert emb.dimensions == 3
+    assert isinstance(emb.embedding_id, EmbeddingId)
+
+
+def test_extracted_content_validation():
+    # Minimal sanity: DocumentFragmentId type exists and byte content is required
+    frag_id: DocumentFragmentId = uuid4()
+
+    from vdb_core.domain.value_objects.document import ExtractedContent
+
+    with pytest.raises(TypeError):
+        ExtractedContent(  # type: ignore[call-arg]
+            content="not-bytes",
+            modality=ModalityType(ModalityTypeEnum.TEXT),
+            source_fragments=[(frag_id, 0, 10)],
+            document_offset_start=0,
+            document_offset_end=10,
+        )
+
+
+def test_embedding_config_dataclass():
+    cfg = EmbeddingConfig(
+        provider=EmbeddingProvider.COHERE,
+        model="embed-english-v3.0",
+        dimension=1024,
+        api_key=None,
+    )
+    assert cfg.dimension == 1024
+
+
