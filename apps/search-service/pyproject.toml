@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-vdb-core = { path = "../../packages/core", editable = true }
+vdb-core = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

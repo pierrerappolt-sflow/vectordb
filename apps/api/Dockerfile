@@ -30,9 +30,8 @@ COPY apps/search-service/pyproject.toml ./apps/search-service/
 COPY packages/ ./packages/
 COPY apps/ ./apps/
 
-# Install dependencies using uv with cache mount (after sources are present)
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+# Install dependencies using uv (no cache mount for clean build)
+RUN uv sync --frozen --no-dev
 
 # ==================== Development Stage ====================
 FROM base as development
