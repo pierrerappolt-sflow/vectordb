@@ -5,11 +5,6 @@ from .vectorization_config_events import (
     DocumentVectorizationCompleted,
     DocumentVectorizationFailed,
     DocumentVectorizationPending,
-    LibraryConfigAdded,
-    LibraryConfigRemoved,
-    VectorizationConfigCreated,
-    VectorizationConfigUpdated,
-    VectorizationConfigVersionCreated,
 )
 
 __all__ = [
@@ -18,10 +13,5 @@ __all__ = [
     "DocumentVectorizationCompleted",
     "DocumentVectorizationFailed",
     "DocumentVectorizationPending",
-    "LibraryConfigAdded",
-    "LibraryConfigRemoved",
     "LibraryCreated",
-    "VectorizationConfigCreated",
-    "VectorizationConfigUpdated",
-    "VectorizationConfigVersionCreated",
 ]
