@@ -70,7 +70,8 @@ export default function DocsPage() {
                 <li>3. Temporal workflows orchestrate the processing pipeline</li>
                 <li>4. Text is chunked using configurable strategies</li>
                 <li>5. Chunks are converted to embeddings using the configured provider</li>
-                <li>6. Embeddings are stored in pgvector for semantic search</li>
+                <li>6. Embeddings are created and persisted in the database</li>
+                <li>7. Embeddings are indexed for semantic search</li>
               </ol>
             </div>
             <div className="space-y-2">

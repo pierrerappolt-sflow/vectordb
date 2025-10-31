@@ -1,0 +1,9 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    env:
+      - 'DOCKER_BUILDKIT=1'
+    args: ['build', '-f', './apps/search-service/Dockerfile', '-t', 'us-central1-docker.pkg.dev/ci-dev-376017/vdb-images/vdb-search:latest', '.']
+images: ['us-central1-docker.pkg.dev/ci-dev-376017/vdb-images/vdb-search:latest']
+options:
+  machineType: 'E2_HIGHCPU_8'
+  diskSizeGb: 100

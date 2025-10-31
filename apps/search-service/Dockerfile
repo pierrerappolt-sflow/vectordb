@@ -13,7 +13,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /workspace
 
 # Copy workspace configuration
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock config.yaml ./
 
 # Copy all workspace packages (needed for dependency resolution)
 COPY packages/ ./packages/

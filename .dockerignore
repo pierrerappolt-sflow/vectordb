@@ -1,0 +1,15 @@
+# Local env files override build args - must exclude them
+.env.local
+**/.env.local
+**/.env*.local
+apps/ui/.env.local
+
+# Development
+**/node_modules
+**/.next
+.venv
+**/__pycache__
+
+# Git
+.git
+.gitignore

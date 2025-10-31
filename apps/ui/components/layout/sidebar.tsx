@@ -25,25 +25,25 @@ export function Sidebar() {
       id: "temporal",
       icon: Workflow,
       label: "Temporal",
-      href: process.env.NEXT_PUBLIC_TEMPORAL_UI_HOST || "http://localhost:8080"
+      href: process.env.NEXT_PUBLIC_TEMPORAL_UI_HOST || "https://temporal.pierrestack.com"
     },
     {
       id: "rabbitmq",
       icon: Inbox,
       label: "RabbitMQ",
-      href: process.env.NEXT_PUBLIC_RABBITMQ_UI_HOST || "http://localhost:15672"
+      href: process.env.NEXT_PUBLIC_RABBITMQ_UI_HOST || "https://rabbitmq.pierrestack.com"
     },
     {
       id: "database",
       icon: Database,
       label: "Postgres",
-      href: process.env.NEXT_PUBLIC_DATABASE_UI_HOST || "http://localhost:8081"
+      href: process.env.NEXT_PUBLIC_DATABASE_UI_HOST || "https://pgweb.pierrestack.com"
     },
     {
       id: "api-docs",
       icon: FileText,
       label: "API Docs",
-      href: process.env.NEXT_PUBLIC_API_DOCS_URL || "http://localhost:8000/docs"
+      href: process.env.NEXT_PUBLIC_API_DOCS_URL || "https://api.pierrestack.com/docs"
     },
   ];
 

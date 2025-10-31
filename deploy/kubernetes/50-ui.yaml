@@ -48,17 +48,13 @@ spec:
       containers:
         - name: ui
           image: us-central1-docker.pkg.dev/ci-dev-376017/vdb-images/vdb-ui:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 3000
               name: http
           env:
-            - name: NEXT_PUBLIC_API_URL
-              value: "https://api.pierrestack.com"
             - name: API_INTERNAL_URL
               value: "http://api:80"
-            - name: NEXT_PUBLIC_TEMPORAL_UI_URL
-              value: "https://temporal.pierrestack.com"
             - name: TEMPORAL_UI_HOST
               value: "http://temporal-ui:8080"
             - name: DATABASE_UI_HOST

@@ -136,7 +136,7 @@ fi
 echo ""
 echo "Creating terraform.tfvars..."
 
-cd "$(dirname "$0")/../deploy/terraform/gcp"
+cd "$(dirname "$0")/../terraform/gcp"
 
 cat > terraform.tfvars <<EOF
 # GCP Project Configuration
@@ -197,7 +197,7 @@ echo ""
 # Update backend.tf if using remote state
 echo "Configuring Terraform remote state..."
 
-cd "$(dirname "$0")/../deploy/terraform/gcp"
+cd "$(dirname "$0")/../terraform/gcp"
 
 cat > backend.tf <<EOF
 terraform {
@@ -236,6 +236,6 @@ echo "  4. Deploy to GKE:"
 echo "     ${YELLOW}make gke-full${NC}"
 echo ""
 echo "  Or see detailed guide:"
-echo "     ${YELLOW}cat deploy/terraform/SETUP.md${NC}"
+echo "     ${YELLOW}cat terraform/SETUP.md${NC}"
 echo ""
 echo "=========================================="

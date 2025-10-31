@@ -118,6 +118,8 @@ class VectorizationConfigReadModel:
     previous_version_id: str | None  # Previous version UUID (if exists)
     chunking_strategy_ids: list[str]  # List of chunking strategy UUIDs
     embedding_strategy_ids: list[str]  # List of embedding strategy UUIDs
+    chunking_strategy_names: list[str]  # List of chunking strategy names for display
+    embedding_strategy_names: list[str]  # List of embedding strategy names for display
     vector_indexing_strategy: str  # VectorIndexingStrategy enum value
     vector_similarity_metric: str  # VectorSimilarityMetric enum value
     created_at: datetime

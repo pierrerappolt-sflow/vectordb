@@ -9,6 +9,9 @@
 **/.mypy_cache/
 **/.ruff_cache/
 .env
+.env.local
+**/.env.local
+**/.env*.local
 **/.DS_Store
 **/.terraform/
 **/*.tfstate*

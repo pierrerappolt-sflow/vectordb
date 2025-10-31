@@ -1,0 +1,55 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    env:
+      - 'DOCKER_BUILDKIT=1'
+    args:
+      - 'build'
+      - '-f'
+      - './apps/ui/Dockerfile'
+      - '--target'
+      - 'runner'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_API_URL=https://api.pierrestack.com'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_API_DOCS_URL=https://api.pierrestack.com/docs'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_TEMPORAL_UI_HOST=https://temporal.pierrestack.com'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_RABBITMQ_UI_HOST=https://rabbitmq.pierrestack.com'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_DATABASE_UI_HOST=https://pgweb.pierrestack.com'
+      - '--no-cache'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/ci-dev-376017/vdb-images/vdb-ui:latest'
+      - '.'
+
+  # Deploy to Kubernetes
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args:
+      - 'rollout'
+      - 'restart'
+      - 'deployment/ui'
+      - '-n'
+      - 'vdb'
+    env:
+      - 'CLOUDSDK_COMPUTE_REGION=us-central1'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=vdb-cluster'
+
+  # Wait for rollout to complete
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args:
+      - 'rollout'
+      - 'status'
+      - 'deployment/ui'
+      - '-n'
+      - 'vdb'
+      - '--timeout=5m'
+    env:
+      - 'CLOUDSDK_COMPUTE_REGION=us-central1'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=vdb-cluster'
+
+images:
+  - 'us-central1-docker.pkg.dev/ci-dev-376017/vdb-images/vdb-ui:latest'
+options:
+  machineType: 'E2_HIGHCPU_8'
+  diskSizeGb: 100

@@ -76,6 +76,8 @@ export default function LibrariesPage() {
       setCreating(true);
       const newLibrary = await createLibrary("Wikipedia Pages");
       setIsCreateDialogOpen(false);
+      // Set authorization flag for sample upload page
+      sessionStorage.setItem(`sample-upload-${newLibrary.id}`, "true");
       // Navigate to sample upload page
       router.push(`/libraries/${newLibrary.id}/sample-upload`);
     } catch (e) {

@@ -59,7 +59,7 @@ spec:
       containers:
         - name: worker
           image: us-central1-docker.pkg.dev/ci-dev-376017/vdb-images/vdb-worker:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: DATABASE_URL
               valueFrom:

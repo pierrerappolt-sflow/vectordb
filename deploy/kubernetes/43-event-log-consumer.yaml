@@ -48,7 +48,7 @@ spec:
       containers:
         - name: event-log-consumer
           image: us-central1-docker.pkg.dev/ci-dev-376017/vdb-images/vdb-worker:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command:
             - uv
             - run

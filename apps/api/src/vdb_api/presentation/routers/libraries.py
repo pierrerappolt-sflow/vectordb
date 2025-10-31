@@ -767,7 +767,7 @@ async def get_query(
         )
 
 
-@router.get("/{library_id}/chunks/{chunk_id}/context", response_model=ChunkWithContextResponse, tags=["documents"])
+@router.get("/{library_id}/chunks/{chunk_id}/context", response_model=ChunkWithContextResponse, tags=["queries"])
 async def get_chunk_with_context(
     library_id: str = Path(..., description="Library ID"),
     chunk_id: str = Path(..., description="Chunk ID"),
@@ -932,36 +932,34 @@ async def get_library_configs(
     # Validate UUID format
     validate_uuid(library_id, "library_id")
 
-    from vdb_core.domain.value_objects import LibraryId
+    # Use read repository to get configs with strategy names
+    provider = container.get_read_repository_provider()
+    async with provider:
+        config_read_models = await provider.vectorization_configs.get_by_library(library_id)
 
-    uow = container.get_unit_of_work()
-    async with uow:
-        library = await uow.libraries.get(LibraryId(library_id))
-
-        if not library:
-            raise HTTPException(status_code=404, detail=f"Library {library_id} not found")
-
-        # Map library.configs (tuple of VectorizationConfig entities) to response schemas
-        configs = [
-            VectorizationConfigResponse(
-                id=str(config.id),
-                version=config.version,
-                status=str(config.status),
-                description=config.description,
-                previous_version_id=str(config.previous_version_id) if config.previous_version_id else None,
-                chunking_strategy_ids=[str(sid) for sid in config.chunking_strategy_ids],
-                embedding_strategy_ids=[str(sid) for sid in config.embedding_strategy_ids],
-                vector_indexing_strategy=str(config.vector_indexing_strategy),
-                vector_similarity_metric=str(config.vector_similarity_metric),
-            )
-            for config in library.configs
-        ]
-
-        return GetLibraryConfigsResponse(
-            library_id=library_id,
-            configs=configs,
-            total=len(configs),
+    # Map read models to response schemas
+    configs = [
+        VectorizationConfigResponse(
+            id=config.id,
+            version=config.version,
+            status=config.status,
+            description=config.description,
+            previous_version_id=config.previous_version_id,
+            chunking_strategy_ids=config.chunking_strategy_ids,
+            embedding_strategy_ids=config.embedding_strategy_ids,
+            chunking_strategy_names=config.chunking_strategy_names,
+            embedding_strategy_names=config.embedding_strategy_names,
+            vector_indexing_strategy=config.vector_indexing_strategy,
+            vector_similarity_metric=config.vector_similarity_metric,
         )
+        for config in config_read_models
+    ]
+
+    return GetLibraryConfigsResponse(
+        library_id=library_id,
+        configs=configs,
+        total=len(configs),
+    )
 
 
 # Global events endpoint (no library filtering)
@@ -1082,6 +1080,8 @@ async def get_vectorization_configs(
             previous_version_id=config.previous_version_id,
             chunking_strategy_ids=config.chunking_strategy_ids,
             embedding_strategy_ids=config.embedding_strategy_ids,
+            chunking_strategy_names=config.chunking_strategy_names,
+            embedding_strategy_names=config.embedding_strategy_names,
             vector_indexing_strategy=config.vector_indexing_strategy,
             vector_similarity_metric=config.vector_similarity_metric,
         )

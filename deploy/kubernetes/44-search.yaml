@@ -53,7 +53,7 @@ spec:
       containers:
         - name: search
           image: us-central1-docker.pkg.dev/ci-dev-376017/vdb-images/vdb-search:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command:
             - uv
             - run

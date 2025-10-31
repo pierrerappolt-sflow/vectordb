@@ -1,0 +1,15 @@
+# Ignore local env files - they override build args
+.env*.local
+.env.local
+
+# Development
+node_modules
+.next
+.cache
+
+# Testing
+coverage
+
+# Misc
+.DS_Store
+*.log

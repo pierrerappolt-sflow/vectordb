@@ -7,7 +7,7 @@ metadata:
   labels:
     app: search-worker
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: search-worker
@@ -56,10 +56,18 @@ spec:
                 echo "Waiting for search service...";
                 sleep 2;
               done
+      volumes:
+        - name: config
+          configMap:
+            name: vdb-app-config
       containers:
         - name: search-worker
           image: us-central1-docker.pkg.dev/ci-dev-376017/vdb-images/vdb-worker:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: config
+              mountPath: /workspace/config.yaml
+              subPath: config.yaml
           command:
             - uv
             - run

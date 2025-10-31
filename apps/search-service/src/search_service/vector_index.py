@@ -1,4 +1,15 @@
-"""NumPy in-memory vector store for similarity search."""
+"""NumPy in-memory vector store for similarity search.
+
+Supported strategies and complexity (n vectors, d dims, k results):
+- FLAT (brute-force exact):
+  - Time: O(n·d) per query; Space: O(n·d)
+  - Simple, exact results; no preprocessing.
+- IVF-Flat (coarse quantization, exact within probed lists):
+  - Build: centroids (nlist) + posting lists
+  - Query: probe nprobe closest centroids; exact on candidates only
+  - Time: O(nlist·d + nprobe·(n/nlist)·d) expected; Space: O(n·d + nlist·d + n)
+  - Sublinear for suitable nlist/nprobe; no external deps.
+"""
 
 from __future__ import annotations
 
@@ -11,14 +22,14 @@ from vdb_core.domain.value_objects import VectorIndexingStrategy, VectorSimilari
 
 logger = logging.getLogger(__name__)
 
-
 class VectorIndex:
     """In-memory vector index using NumPy."""
 
     def __init__(
         self, dimensions: int, strategy: str, metric: VectorSimilarityMetric = VectorSimilarityMetric.L2
     ) -> None:
-        """Initialize vector index.
+        """
+        Initialize vector index.
 
         Args:
             dimensions: Vector dimensions
@@ -34,6 +45,7 @@ class VectorIndex:
         self.vectors: NDArray[np.float32] | None = None  # Shape: (n_vectors, dimensions)
         self.embedding_ids: list[str] = []  # Embedding IDs in same order as vectors
         self.id_to_index: dict[str, int] = {}  # embedding_id -> index mapping
+        self.tombstones: set[int] = set()  # Indices of removed vectors
 
     def add(self, embedding_id: str, vector: list[float]) -> None:
         """Add vector to index.
@@ -47,8 +59,6 @@ class VectorIndex:
             msg = f"Vector dimension mismatch: expected {self.dimensions}, got {len(vector)}"
             raise ValueError(msg)
 
-        # Convert to numpy array,
-        # Handle compression here?
         vec_array = np.array(vector, dtype=np.float32).reshape(1, -1)  # Shape: (1, dimensions)
 
         if self.vectors is None:
@@ -69,9 +79,12 @@ class VectorIndex:
 
         Returns:
             Tuple of (embedding_ids, scores)
-
         """
         if self.vectors is None or len(self.embedding_ids) == 0:
+            return [], []
+
+        valid_indices = [i for i in range(len(self.embedding_ids)) if i not in self.tombstones]
+        if not valid_indices:
             return [], []
 
         query_array = np.array(query_vector, dtype=np.float32)  # Shape: (dimensions,)
@@ -84,7 +97,7 @@ class VectorIndex:
         elif self.metric == VectorSimilarityMetric.COSINE:
             query_norm = query_array / np.linalg.norm(query_array)
             # TODO: precomputing norms for all vectors and storing them?
-            vectors_norm = self.vectors / np.linalg.norm(self.vectors, axis=1, keepdims=True)
+            vectors_norm = self.vectors[valid_indices] / np.linalg.norm(self.vectors[valid_indices], axis=1, keepdims=True)
             scores = np.dot(vectors_norm, query_norm)
             sorted_indices = np.argsort(scores)[::-1]
 
@@ -96,11 +109,11 @@ class VectorIndex:
             raise ValueError(msg)
 
         # Get top k results
-        k = min(k, len(self.embedding_ids))
+        k = min(k, len(valid_indices))
         top_k_indices = sorted_indices[:k]
 
         # Map back to embedding IDs and scores
-        result_ids = [self.embedding_ids[int(idx)] for idx in top_k_indices]
+        result_ids = [self.embedding_ids[valid_indices[int(idx)]] for idx in top_k_indices]
         result_scores = [scores[idx].item() for idx in top_k_indices]
 
         return result_ids, result_scores
@@ -118,21 +131,155 @@ class VectorIndex:
         if embedding_id not in self.id_to_index:
             return False
         idx_to_remove = self.id_to_index[embedding_id]
-        if self.vectors is not None:
-            mask = np.ones(len(self.embedding_ids), dtype=bool)
-            mask[idx_to_remove] = False
-            self.vectors = self.vectors[mask]
-            if self.vectors is not None and len(self.vectors) == 0:
-                self.vectors = None
-        self.embedding_ids.pop(idx_to_remove)
-        self.id_to_index = {eid: i for i, eid in enumerate(self.embedding_ids)}
-
+        self.tombstones.add(idx_to_remove)
+        # No mutation of self.embedding_ids or self.id_to_index, just tombstone.
         return True
 
     @property
     def count(self) -> int:
         """Get number of vectors in index."""
-        return len(self.embedding_ids)
+        return len(self.embedding_ids) - len(self.tombstones)
+
+
+class IVFIndex(VectorIndex):
+    """IVF-Flat index (coarse quantization + exact re-ranking on probed lists).
+
+    Parameters:
+        nlist: number of coarse centroids (lists)
+        nprobe: number of lists to probe at query time
+
+    Notes:
+        - Implemented for COSINE similarity only.
+        - Centroids are initialized online and updated with incremental means.
+        - Vectors are stored in the base array; posting lists keep indices.
+    """
+
+    def __init__(
+        self,
+        dimensions: int,
+        metric: VectorSimilarityMetric,
+        nlist: int = 64,
+        nprobe: int = 8,
+    ) -> None:
+        super().__init__(dimensions, VectorIndexingStrategy.IVF.value, metric)
+        if self.metric != VectorSimilarityMetric.COSINE:
+            # TODO: Raise this by VecConfig AggRoot on creation.
+            msg = "IVFIndex currently supports COSINE only"
+            raise NotImplementedError(msg)
+        self.nlist = max(1, int(nlist))
+        self.nprobe = max(1, int(nprobe))
+        # Centroids and posting lists
+        self.centroids: NDArray[np.float32] | None = None  # (nlist_current, d)
+        self.lists: list[list[int]] = []  # posting lists hold indices into self.vectors
+        # Track index -> list id for fast removal
+        self.index_to_list: dict[int, int] = {}
+        # Running counts for centroid incremental update
+        self.list_counts: list[int] = []
+
+    def _ensure_centroid(self, vec: NDArray[np.float32]) -> int:
+        """Ensure we have a centroid to assign to; grow until nlist initialized."""
+        if self.centroids is None or len(self.lists) < self.nlist:
+            # Initialize new centroid with normalized vector
+            v = vec / (np.linalg.norm(vec) + 1e-12)
+            self.centroids = v.reshape(1, -1) if self.centroids is None else np.vstack([self.centroids, v])
+            self.lists.append([])
+            self.list_counts.append(0)
+            return len(self.lists) - 1
+        return -1
+
+    def _assign_list(self, vec: NDArray[np.float32]) -> int:
+        if self.centroids is None or len(self.lists) == 0:
+            msg = "Centroids not initialized"
+            raise RuntimeError(msg)
+        v = vec / (np.linalg.norm(vec) + 1e-12)
+        sims = self.centroids @ v
+        return int(np.argmax(sims))
+
+    def _update_centroid(self, list_id: int, vec: NDArray[np.float32]) -> None:
+        if self.centroids is None:
+            msg = "Centroids not initialized"
+            raise RuntimeError(msg)
+        cnt = self.list_counts[list_id]
+        v = vec / (np.linalg.norm(vec) + 1e-12)
+        # Incremental mean in cosine space (re-normalize to unit length)
+        new_center = (self.centroids[list_id] * cnt + v) / (cnt + 1)
+        self.centroids[list_id] = new_center / (np.linalg.norm(new_center) + 1e-12)
+        self.list_counts[list_id] = cnt + 1
+
+    def add(self, embedding_id: str, vector: list[float]) -> None:
+        if len(vector) != self.dimensions:
+            msg = f"Vector dimension mismatch: expected {self.dimensions}, got {len(vector)}"
+            raise ValueError(msg)
+        vec = np.array(vector, dtype=np.float32)
+
+        # Append to storage first (base class arrays)
+        if self.vectors is None:
+            self.vectors = vec.reshape(1, -1)
+        else:
+            self.vectors = np.vstack([self.vectors, vec.reshape(1, -1)])
+        idx = len(self.embedding_ids)
+        self.embedding_ids.append(embedding_id)
+        self.id_to_index[embedding_id] = idx
+
+        # Initialize centroids until nlist is reached
+        centroid_id = self._ensure_centroid(vec)
+        if centroid_id == -1:
+            centroid_id = self._assign_list(vec)
+        self.lists[centroid_id].append(idx)
+        self.index_to_list[idx] = centroid_id
+        self._update_centroid(centroid_id, vec)
+
+    def remove(self, embedding_id: str) -> bool:
+        if embedding_id not in self.id_to_index:
+            return False
+        idx = self.id_to_index[embedding_id]
+        # Remove from posting list
+        list_id = self.index_to_list.get(idx)
+        if list_id is not None:
+            try:
+                self.lists[list_id].remove(idx)
+            except ValueError:
+                pass
+            self.index_to_list.pop(idx, None)
+        # Tombstone in base index
+        removed = super().remove(embedding_id)
+        # Do not rebuild lists/id mappings
+        return removed
+
+    def search(self, query_vector: list[float], k: int) -> tuple[list[str], list[float]]:
+        if self.vectors is None or len(self.embedding_ids) == 0:
+            return [], []
+        if self.centroids is None or len(self.lists) == 0:
+            return super().search(query_vector, k)
+
+        q = np.array(query_vector, dtype=np.float32)
+        q = q / (np.linalg.norm(q) + 1e-12)
+
+        sims = self.centroids @ q
+        nprobe = min(self.nprobe, sims.shape[0])
+        probe_ids = np.argpartition(sims, -nprobe)[-nprobe:]
+
+        candidate_indices: list[int] = []
+        for cid in probe_ids:
+            candidate_indices.extend(self.lists[int(cid)])
+        # Remove tombstoned candidates
+        candidate_indices = [i for i in candidate_indices if i not in self.tombstones]
+
+        if not candidate_indices:
+            return [], []
+
+        cand_vecs = self.vectors[candidate_indices]
+        cand_norm = cand_vecs / (np.linalg.norm(cand_vecs, axis=1, keepdims=True) + 1e-12)
+        scores = cand_norm @ q
+
+        k_eff = min(k, len(candidate_indices))
+        top_idx = np.argpartition(scores, -k_eff)[-k_eff:]
+        order = np.argsort(scores[top_idx])[::-1]
+        top_idx = top_idx[order]
+
+        result_ids = [self.embedding_ids[candidate_indices[int(i)]] for i in top_idx]
+        result_scores = [float(scores[int(i)]) for i in top_idx]
+        return result_ids, result_scores
 
 
 class VectorIndexManager:
@@ -224,10 +371,8 @@ class VectorIndexManager:
             return VectorIndex(dimensions, VectorIndexingStrategy.FLAT.value, metric)
 
         if strategy_lower == VectorIndexingStrategy.IVF.value:
-            # TODO: Implement IVF (Inverted File Index) indexing
-            # For now, use FLAT implementation
-            logger.warning("IVF not yet implemented - using FLAT for now")
-            return VectorIndex(dimensions, VectorIndexingStrategy.FLAT.value, metric)
+            # IVF-Flat implementation (no external deps)
+            return IVFIndex(dimensions, metric)
 
         if strategy_lower == VectorIndexingStrategy.PQ.value:
             # TODO: Implement PQ (Product Quantization) indexing
@@ -395,7 +540,7 @@ class VectorIndexManager:
                         vector = json.loads(row["vector"]) if isinstance(row["vector"], str) else row["vector"]
 
                         # Parse similarity metric
-                        similarity_metric = VectorSimilarityMetric(row["similarity_metric"])
+                        similarity_metric = VectorSimilarityMetric(row["vector_similarity_metric"])
 
                         self.add_vector(
                             embedding_id=str(row["id"]),

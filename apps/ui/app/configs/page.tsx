@@ -83,9 +83,10 @@ export default function VectorizationConfigsPage() {
                   <TableHead>Version</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Description</TableHead>
+                  <TableHead>Chunking Strategy</TableHead>
+                  <TableHead>Embedding Strategy</TableHead>
                   <TableHead>Indexing Strategy</TableHead>
                   <TableHead>Similarity Metric</TableHead>
-                  <TableHead>Strategies</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -101,18 +102,24 @@ export default function VectorizationConfigsPage() {
                       <div className="max-w-md truncate">{config.description || "—"}</div>
                     </TableCell>
                     <TableCell>
+                      <span className="font-mono text-xs">
+                        {config.chunking_strategy_names.length > 0
+                          ? config.chunking_strategy_names.join(", ")
+                          : "—"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-xs">
+                        {config.embedding_strategy_names.length > 0
+                          ? config.embedding_strategy_names.join(", ")
+                          : "—"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
                       <span className="font-mono text-xs">{config.vector_indexing_strategy}</span>
                     </TableCell>
                     <TableCell>
                       <span className="font-mono text-xs">{config.vector_similarity_metric}</span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-                        <div>
-                          {config.chunking_strategy_ids.length} chunking,{" "}
-                          {config.embedding_strategy_ids.length} embedding
-                        </div>
-                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

@@ -132,6 +132,8 @@ class VectorizationConfigResponse(BaseModel):
     previous_version_id: str | None = Field(None, description="Previous version ID (if this is a new version)")
     chunking_strategy_ids: list[str] = Field(..., description="List of chunking strategy IDs")
     embedding_strategy_ids: list[str] = Field(..., description="List of embedding strategy IDs")
+    chunking_strategy_names: list[str] = Field(default_factory=list, description="List of chunking strategy names")
+    embedding_strategy_names: list[str] = Field(default_factory=list, description="List of embedding strategy names")
     vector_indexing_strategy: str = Field(..., description="Vector indexing strategy")
     vector_similarity_metric: str = Field(..., description="Similarity metric")
 

@@ -47,11 +47,17 @@ WORKDIR /app
 
 # Accept build arguments for Next.js public environment variables
 ARG NEXT_PUBLIC_API_URL=http://api.pierrestack.com
-ARG NEXT_PUBLIC_TEMPORAL_UI_URL=http://temporal.pierrestack.com
+ARG NEXT_PUBLIC_API_DOCS_URL=http://api.pierrestack.com/docs
+ARG NEXT_PUBLIC_TEMPORAL_UI_HOST=http://temporal.pierrestack.com
+ARG NEXT_PUBLIC_RABBITMQ_UI_HOST=http://rabbitmq.pierrestack.com
+ARG NEXT_PUBLIC_DATABASE_UI_HOST=http://db.pierrestack.com
 
 # Set them as environment variables for the build
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_TEMPORAL_UI_URL=$NEXT_PUBLIC_TEMPORAL_UI_URL
+ENV NEXT_PUBLIC_API_DOCS_URL=$NEXT_PUBLIC_API_DOCS_URL
+ENV NEXT_PUBLIC_TEMPORAL_UI_HOST=$NEXT_PUBLIC_TEMPORAL_UI_HOST
+ENV NEXT_PUBLIC_RABBITMQ_UI_HOST=$NEXT_PUBLIC_RABBITMQ_UI_HOST
+ENV NEXT_PUBLIC_DATABASE_UI_HOST=$NEXT_PUBLIC_DATABASE_UI_HOST
 
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules

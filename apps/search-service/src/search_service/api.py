@@ -10,6 +10,8 @@ import asyncpg
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from vdb_core.domain.value_objects import VectorSimilarityMetric
+
 if TYPE_CHECKING:
     from search_service.vector_index import VectorIndexManager
 
@@ -144,12 +146,7 @@ def create_search_app(index_manager: VectorIndexManager, database_url: str) -> F
                 raise HTTPException(status_code=404, detail=msg)
 
             strategy = config_row["vector_indexing_strategy"]
-            metric = config_row["vector_similarity_metric"]
-
-            # Validate only FLAT indexing is supported
-            if strategy.upper() != "FLAT":
-                msg = f"Only FLAT indexing is supported, config uses: {strategy}"
-                raise HTTPException(status_code=400, detail=msg)
+            metric = VectorSimilarityMetric(config_row["vector_similarity_metric"])
 
             # Get dimensions from first embedding vector
             if not request.embeddings:
@@ -159,34 +156,26 @@ def create_search_app(index_manager: VectorIndexManager, database_url: str) -> F
             dimensions = len(request.embeddings[0].vector)
 
             # Batch add vectors to index manager
-            indexed_count = 0
-            failed_count = 0
-
             for item in request.embeddings:
-                try:
-                    index_manager.add_vector(
-                        embedding_id=item.embedding_id,
-                        library_id=request.library_id,
-                        config_id=request.config_id,
-                        vector=item.vector,
-                        dimensions=dimensions,
-                        strategy=strategy,
-                        metric=metric,
-                    )
-                    indexed_count += 1
-                except Exception as e:
-                    logger.error("Failed to index embedding %s: %s", item.embedding_id, str(e))
-                    failed_count += 1
+                index_manager.add_vector(
+                    embedding_id=item.embedding_id,
+                    library_id=request.library_id,
+                    config_id=request.config_id,
+                    vector=item.vector,
+                    dimensions=dimensions,
+                    strategy=strategy,
+                    metric=metric,
+                )
 
+            indexed_count = len(request.embeddings)
             logger.info(
-                "Batch indexed %s embeddings for library=%s, config=%s (failed=%s)",
+                "Batch indexed %s embeddings for library=%s, config=%s",
                 indexed_count,
                 request.library_id,
                 request.config_id,
-                failed_count,
             )
 
-            return BatchIndexResponse(indexed_count=indexed_count, failed_count=failed_count)
+            return BatchIndexResponse(indexed_count=indexed_count, failed_count=0)
 
         except HTTPException:
             raise

@@ -323,14 +323,14 @@ async def generate_embeddings_activity(
                 SELECT chunk_id, vector
                 FROM embeddings
                 WHERE chunk_id = ANY(:chunk_ids)
-                  AND embedding_strategy_id = :strategy_id
+                  AND vectorization_config_id = :config_id
             """)
 
             result = await uow.session.execute(
                 existing_query,
                 {
                     "chunk_ids": [chunk.id for chunk in modality_chunks],
-                    "strategy_id": str(embedding_strategy.id),
+                    "config_id": str(vectorization_config.id),
                 }
             )
             existing_rows = result.mappings().all()
@@ -414,10 +414,10 @@ async def generate_embeddings_activity(
                 await uow.session.execute(
                     text("""
                         INSERT INTO embeddings (
-                            id, chunk_id, embedding_strategy_id, vectorization_config_id,
+                            id, chunk_id, vectorization_config_id,
                             library_id, vector, dimensions
                         ) VALUES (
-                            :id, :chunk_id, :embedding_strategy_id, :vectorization_config_id,
+                            :id, :chunk_id, :vectorization_config_id,
                             :library_id, :vector, :dimensions
                         )
                         ON CONFLICT (id) DO NOTHING
@@ -425,7 +425,6 @@ async def generate_embeddings_activity(
                     {
                         "id": stored_embedding.embedding_id.value,
                         "chunk_id": chunk.id,  # Use chunk UUID directly
-                        "embedding_strategy_id": str(embedding_strategy.id),
                         "vectorization_config_id": str(vectorization_config.id),
                         "library_id": str(library.id),
                         "vector": json.dumps(list(vector)),

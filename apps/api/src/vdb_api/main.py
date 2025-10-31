@@ -35,12 +35,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     container = DIContainer()
     app.state.container = container
 
-    # Startup: Bootstrap default configs
-    from vdb_core.infrastructure.bootstrap import DefaultConfigsBootstrap
-
-    bootstrap = DefaultConfigsBootstrap(uow_factory=container.get_unit_of_work)
-    await bootstrap.bootstrap_default_configs()
-
     # Startup: Connect to Temporal (optional for local development)
     temporal_host = os.getenv("TEMPORAL_HOST", "localhost")
     temporal_port = os.getenv("TEMPORAL_PORT", "7233")

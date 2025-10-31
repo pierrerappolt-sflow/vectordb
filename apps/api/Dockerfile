@@ -20,15 +20,17 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /workspace
 
 # Copy only dependency files first (better cache invalidation)
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock config.yaml ./
 COPY packages/core/pyproject.toml ./packages/core/
 COPY apps/api/pyproject.toml ./apps/api/
 COPY apps/worker/pyproject.toml ./apps/worker/
+COPY apps/search-service/pyproject.toml ./apps/search-service/
 
 # Copy source code so editable workspace packages have their files (e.g., README.md)
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 COPY apps/worker/ ./apps/worker/
+COPY apps/search-service/ ./apps/search-service/
 
 # Install dependencies using uv (no cache mount for clean build)
 RUN uv sync --frozen --no-dev

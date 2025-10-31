@@ -81,20 +81,26 @@ export default function LibraryDetailPage() {
     fetchData();
   }, [libraryId]);
 
-  // Poll for updates when documents are processing
+  // Poll for updates every 10 seconds for 10 minutes
   useEffect(() => {
-    const hasProcessing = documents.some((doc) =>
-      doc.vectorization_statuses?.some((s) => s.status === "pending" || s.status === "processing")
-    );
-
-    if (!hasProcessing) return;
+    const startTime = Date.now();
+    const TEN_MINUTES = 10 * 60 * 1000; // 10 minutes in milliseconds
+    const POLL_INTERVAL = 10 * 1000; // 10 seconds
 
     const interval = setInterval(() => {
-      fetchData();
-    }, 3000); // Poll every 3 seconds
+      const elapsed = Date.now() - startTime;
+
+      if (elapsed >= TEN_MINUTES) {
+        clearInterval(interval);
+        return;
+      }
+
+      // Only refresh documents, not the entire page
+      getDocuments(libraryId).then(setDocuments).catch(console.error);
+    }, POLL_INTERVAL);
 
     return () => clearInterval(interval);
-  }, [documents, libraryId]);
+  }, [libraryId]);
 
   function handleFileSelect(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -688,8 +694,8 @@ export default function LibraryDetailPage() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <span>
-                          {selectedConfigId && doc.embeddings_by_config_id?.[selectedConfigId] !== undefined
-                            ? doc.embeddings_by_config_id[selectedConfigId].toLocaleString()
+                          {selectedConfigId
+                            ? (doc.embeddings_by_config_id?.[selectedConfigId] ?? 0).toLocaleString()
                             : doc.embeddings_count.toLocaleString()}
                         </span>
                         {doc.vectorization_statuses?.some(

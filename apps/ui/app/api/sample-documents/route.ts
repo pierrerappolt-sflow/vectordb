@@ -4,10 +4,13 @@ import { getSampleDocuments } from "@/lib/sample-data";
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const count = parseInt(searchParams.get("count") || "100", 10);
+    const countParam = searchParams.get("count");
 
-    // Validate count
-    if (count < 1 || count > 1000) {
+    // If no count provided, return all documents
+    const count = countParam ? parseInt(countParam, 10) : undefined;
+
+    // Validate count if provided
+    if (count !== undefined && (count < 1 || count > 1000)) {
       return NextResponse.json(
         { error: "Count must be between 1 and 1000" },
         { status: 400 }

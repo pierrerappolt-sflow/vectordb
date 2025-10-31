@@ -32,13 +32,32 @@ export default function SampleUploadPage() {
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [authorized, setAuthorized] = useState(false);
+
+  // Check if navigation was authorized (via proper flow, not back button or direct URL)
+  useEffect(() => {
+    const navAuthorized = sessionStorage.getItem(`sample-upload-${libraryId}`);
+
+    if (!navAuthorized) {
+      // Redirect back to library page if not authorized
+      router.push(`/libraries/${libraryId}`);
+      return;
+    }
+
+    setAuthorized(true);
+
+    // Clear the authorization flag so refresh won't work
+    sessionStorage.removeItem(`sample-upload-${libraryId}`);
+  }, [libraryId, router]);
 
   // Fetch sample documents on mount
   useEffect(() => {
+    if (!authorized) return;
+
     async function fetchSampleDocuments() {
       try {
         setLoading(true);
-        const response = await fetch("/api/sample-documents?count=100");
+        const response = await fetch("/api/sample-documents");
 
         if (!response.ok) {
           throw new Error("Failed to fetch sample documents");
@@ -65,10 +84,12 @@ export default function SampleUploadPage() {
     }
 
     fetchSampleDocuments();
-  }, []);
+  }, [authorized]);
 
   // Start upload process when documents are loaded
   useEffect(() => {
+    if (!authorized) return;
+
     // Check if we're done
     if (sampleDocuments.length > 0 && currentIndex >= sampleDocuments.length) {
       setIsComplete(true);
@@ -136,10 +157,15 @@ export default function SampleUploadPage() {
     }
 
     uploadCurrentDocument();
-  }, [sampleDocuments, currentIndex, libraryId]);
+  }, [sampleDocuments, currentIndex, libraryId, authorized]);
 
   function handleViewLibrary() {
     router.push(`/libraries/${libraryId}`);
+  }
+
+  // Don't render anything until authorization check completes
+  if (!authorized) {
+    return null;
   }
 
   if (loading) {
@@ -181,7 +207,7 @@ export default function SampleUploadPage() {
         <div>
           <h1 className="text-4xl font-bold">Uploading Sample Documents</h1>
           <p className="mt-2 text-muted-foreground">
-            Creating library with 100 Wikipedia articles
+            Creating library with all available Wikipedia articles
           </p>
         </div>
 
@@ -234,12 +260,17 @@ export default function SampleUploadPage() {
         <Card>
           <CardHeader>
             <CardTitle>Upload Queue</CardTitle>
-            <CardDescription>Status of all documents</CardDescription>
+            <CardDescription>
+              Showing first 100 of {uploadStatuses.length} documents
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[400px]">
               <div className="space-y-2">
-                {uploadStatuses.map((status, index) => (
+                {uploadStatuses.slice(0, 100).map((status, index) => {
+                  // Show absolute index for display purposes
+                  const absoluteIndex = index;
+                  return (
                   <div
                     key={`${status.filename}-${index}`}
                     className="flex items-center gap-3 rounded-md border p-3"
@@ -271,7 +302,13 @@ export default function SampleUploadPage() {
                       {status.status === "pending" && "Pending"}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
+                {uploadStatuses.length > 100 && (
+                  <div className="rounded-md border p-3 text-center text-sm text-muted-foreground">
+                    ... and {uploadStatuses.length - 100} more documents
+                  </div>
+                )}
               </div>
             </ScrollArea>
           </CardContent>

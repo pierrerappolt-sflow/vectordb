@@ -80,7 +80,7 @@ spec:
       containers:
         - name: api
           image: us-central1-docker.pkg.dev/ci-dev-376017/vdb-images/vdb-api:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
               name: http

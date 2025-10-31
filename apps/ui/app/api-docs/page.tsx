@@ -4,7 +4,7 @@ export default function ApiDocsPage() {
   return (
     <div className="h-screen w-full">
       <iframe
-        src="http://localhost:8000/docs"
+        src="https://api.pierrestack.com/docs"
         className="h-full w-full border-0"
         title="API Documentation"
       />

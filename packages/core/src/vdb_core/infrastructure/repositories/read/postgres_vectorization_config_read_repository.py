@@ -49,20 +49,38 @@ class PostgresVectorizationConfigReadRepository(IVectorizationConfigReadReposito
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
+                WITH config_chunking AS (
+                    SELECT
+                        array_agg(cs.name ORDER BY cs.name) as chunking_names
+                    FROM vectorization_configs vc
+                    CROSS JOIN LATERAL unnest(vc.chunking_strategy_ids) as cs_id
+                    LEFT JOIN chunking_strategies cs ON cs.id = cs_id
+                    WHERE vc.id = $1
+                ),
+                config_embedding AS (
+                    SELECT
+                        array_agg(es.name ORDER BY es.name) as embedding_names
+                    FROM vectorization_configs vc
+                    CROSS JOIN LATERAL unnest(vc.embedding_strategy_ids) as es_id
+                    LEFT JOIN embedding_strategies es ON es.id = es_id
+                    WHERE vc.id = $1
+                )
                 SELECT
-                    id,
-                    version,
-                    status,
-                    description,
-                    previous_version_id,
-                    chunking_strategy_ids,
-                    embedding_strategy_ids,
-                    vector_indexing_strategy,
-                    vector_similarity_metric,
-                    created_at,
-                    updated_at
-                FROM vectorization_configs
-                WHERE id = $1
+                    vc.id,
+                    vc.version,
+                    vc.status,
+                    vc.description,
+                    vc.previous_version_id,
+                    vc.chunking_strategy_ids,
+                    vc.embedding_strategy_ids,
+                    vc.vector_indexing_strategy,
+                    vc.vector_similarity_metric,
+                    vc.created_at,
+                    vc.updated_at,
+                    COALESCE((SELECT chunking_names FROM config_chunking), ARRAY[]::text[]) as chunking_strategy_names,
+                    COALESCE((SELECT embedding_names FROM config_embedding), ARRAY[]::text[]) as embedding_strategy_names
+                FROM vectorization_configs vc
+                WHERE vc.id = $1
                 """,
                 config_id,
             )
@@ -82,6 +100,8 @@ class PostgresVectorizationConfigReadRepository(IVectorizationConfigReadReposito
                 ),
                 chunking_strategy_ids=[str(sid) for sid in row["chunking_strategy_ids"]],
                 embedding_strategy_ids=[str(sid) for sid in row["embedding_strategy_ids"]],
+                chunking_strategy_names=list(row["chunking_strategy_names"]) if row["chunking_strategy_names"] else [],
+                embedding_strategy_names=list(row["embedding_strategy_names"]) if row["embedding_strategy_names"] else [],
                 vector_indexing_strategy=row["vector_indexing_strategy"],
                 vector_similarity_metric=row["vector_similarity_metric"],
                 created_at=row["created_at"],
@@ -107,20 +127,42 @@ class PostgresVectorizationConfigReadRepository(IVectorizationConfigReadReposito
             if statuses is None:
                 rows = await conn.fetch(
                     """
+                    WITH config_chunking AS (
+                        SELECT
+                            vc.id as config_id,
+                            array_agg(cs.name ORDER BY cs.name) as chunking_names
+                        FROM vectorization_configs vc
+                        CROSS JOIN LATERAL unnest(vc.chunking_strategy_ids) as cs_id
+                        LEFT JOIN chunking_strategies cs ON cs.id = cs_id
+                        GROUP BY vc.id
+                    ),
+                    config_embedding AS (
+                        SELECT
+                            vc.id as config_id,
+                            array_agg(es.name ORDER BY es.name) as embedding_names
+                        FROM vectorization_configs vc
+                        CROSS JOIN LATERAL unnest(vc.embedding_strategy_ids) as es_id
+                        LEFT JOIN embedding_strategies es ON es.id = es_id
+                        GROUP BY vc.id
+                    )
                     SELECT
-                        id,
-                        version,
-                        status,
-                        description,
-                        previous_version_id,
-                        chunking_strategy_ids,
-                        embedding_strategy_ids,
-                        vector_indexing_strategy,
-                        vector_similarity_metric,
-                        created_at,
-                        updated_at
-                    FROM vectorization_configs
-                    ORDER BY created_at DESC
+                        vc.id,
+                        vc.version,
+                        vc.status,
+                        vc.description,
+                        vc.previous_version_id,
+                        vc.chunking_strategy_ids,
+                        vc.embedding_strategy_ids,
+                        vc.vector_indexing_strategy,
+                        vc.vector_similarity_metric,
+                        vc.created_at,
+                        vc.updated_at,
+                        COALESCE(cc.chunking_names, ARRAY[]::text[]) as chunking_strategy_names,
+                        COALESCE(ce.embedding_names, ARRAY[]::text[]) as embedding_strategy_names
+                    FROM vectorization_configs vc
+                    LEFT JOIN config_chunking cc ON cc.config_id = vc.id
+                    LEFT JOIN config_embedding ce ON ce.config_id = vc.id
+                    ORDER BY vc.created_at DESC
                     OFFSET $1 LIMIT $2
                     """,
                     offset,
@@ -129,21 +171,45 @@ class PostgresVectorizationConfigReadRepository(IVectorizationConfigReadReposito
             else:
                 rows = await conn.fetch(
                     """
+                    WITH config_chunking AS (
+                        SELECT
+                            vc.id as config_id,
+                            array_agg(cs.name ORDER BY cs.name) as chunking_names
+                        FROM vectorization_configs vc
+                        CROSS JOIN LATERAL unnest(vc.chunking_strategy_ids) as cs_id
+                        LEFT JOIN chunking_strategies cs ON cs.id = cs_id
+                        WHERE vc.status = ANY($1::text[])
+                        GROUP BY vc.id
+                    ),
+                    config_embedding AS (
+                        SELECT
+                            vc.id as config_id,
+                            array_agg(es.name ORDER BY es.name) as embedding_names
+                        FROM vectorization_configs vc
+                        CROSS JOIN LATERAL unnest(vc.embedding_strategy_ids) as es_id
+                        LEFT JOIN embedding_strategies es ON es.id = es_id
+                        WHERE vc.status = ANY($1::text[])
+                        GROUP BY vc.id
+                    )
                     SELECT
-                        id,
-                        version,
-                        status,
-                        description,
-                        previous_version_id,
-                        chunking_strategy_ids,
-                        embedding_strategy_ids,
-                        vector_indexing_strategy,
-                        vector_similarity_metric,
-                        created_at,
-                        updated_at
-                    FROM vectorization_configs
-                    WHERE status = ANY($1::text[])
-                    ORDER BY created_at DESC
+                        vc.id,
+                        vc.version,
+                        vc.status,
+                        vc.description,
+                        vc.previous_version_id,
+                        vc.chunking_strategy_ids,
+                        vc.embedding_strategy_ids,
+                        vc.vector_indexing_strategy,
+                        vc.vector_similarity_metric,
+                        vc.created_at,
+                        vc.updated_at,
+                        COALESCE(cc.chunking_names, ARRAY[]::text[]) as chunking_strategy_names,
+                        COALESCE(ce.embedding_names, ARRAY[]::text[]) as embedding_strategy_names
+                    FROM vectorization_configs vc
+                    LEFT JOIN config_chunking cc ON cc.config_id = vc.id
+                    LEFT JOIN config_embedding ce ON ce.config_id = vc.id
+                    WHERE vc.status = ANY($1::text[])
+                    ORDER BY vc.created_at DESC
                     OFFSET $2 LIMIT $3
                     """,
                     statuses,
@@ -164,6 +230,8 @@ class PostgresVectorizationConfigReadRepository(IVectorizationConfigReadReposito
                     ),
                     chunking_strategy_ids=[str(sid) for sid in row["chunking_strategy_ids"]],
                     embedding_strategy_ids=[str(sid) for sid in row["embedding_strategy_ids"]],
+                    chunking_strategy_names=list(row["chunking_strategy_names"]) if row["chunking_strategy_names"] else [],
+                    embedding_strategy_names=list(row["embedding_strategy_names"]) if row["embedding_strategy_names"] else [],
                     vector_indexing_strategy=row["vector_indexing_strategy"],
                     vector_similarity_metric=row["vector_similarity_metric"],
                     created_at=row["created_at"],
@@ -216,6 +284,28 @@ class PostgresVectorizationConfigReadRepository(IVectorizationConfigReadReposito
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
+                WITH config_chunking AS (
+                    SELECT
+                        vc.id as config_id,
+                        array_agg(cs.name ORDER BY cs.name) as chunking_names
+                    FROM vectorization_configs vc
+                    INNER JOIN library_vectorization_configs lvc ON vc.id = lvc.vectorization_config_id
+                    CROSS JOIN LATERAL unnest(vc.chunking_strategy_ids) as cs_id
+                    LEFT JOIN chunking_strategies cs ON cs.id = cs_id
+                    WHERE lvc.library_id = $1
+                    GROUP BY vc.id
+                ),
+                config_embedding AS (
+                    SELECT
+                        vc.id as config_id,
+                        array_agg(es.name ORDER BY es.name) as embedding_names
+                    FROM vectorization_configs vc
+                    INNER JOIN library_vectorization_configs lvc ON vc.id = lvc.vectorization_config_id
+                    CROSS JOIN LATERAL unnest(vc.embedding_strategy_ids) as es_id
+                    LEFT JOIN embedding_strategies es ON es.id = es_id
+                    WHERE lvc.library_id = $1
+                    GROUP BY vc.id
+                )
                 SELECT
                     vc.id,
                     vc.version,
@@ -227,9 +317,13 @@ class PostgresVectorizationConfigReadRepository(IVectorizationConfigReadReposito
                     vc.vector_indexing_strategy,
                     vc.vector_similarity_metric,
                     vc.created_at,
-                    vc.updated_at
+                    vc.updated_at,
+                    COALESCE(cc.chunking_names, ARRAY[]::text[]) as chunking_strategy_names,
+                    COALESCE(ce.embedding_names, ARRAY[]::text[]) as embedding_strategy_names
                 FROM vectorization_configs vc
                 INNER JOIN library_vectorization_configs lvc ON vc.id = lvc.vectorization_config_id
+                LEFT JOIN config_chunking cc ON cc.config_id = vc.id
+                LEFT JOIN config_embedding ce ON ce.config_id = vc.id
                 WHERE lvc.library_id = $1
                 ORDER BY vc.created_at DESC
                 """,
@@ -249,6 +343,8 @@ class PostgresVectorizationConfigReadRepository(IVectorizationConfigReadReposito
                     ),
                     chunking_strategy_ids=[str(sid) for sid in row["chunking_strategy_ids"]],
                     embedding_strategy_ids=[str(sid) for sid in row["embedding_strategy_ids"]],
+                    chunking_strategy_names=list(row["chunking_strategy_names"]) if row["chunking_strategy_names"] else [],
+                    embedding_strategy_names=list(row["embedding_strategy_names"]) if row["embedding_strategy_names"] else [],
                     vector_indexing_strategy=row["vector_indexing_strategy"],
                     vector_similarity_metric=row["vector_similarity_metric"],
                     created_at=row["created_at"],
