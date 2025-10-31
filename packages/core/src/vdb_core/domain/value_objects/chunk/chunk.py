@@ -12,8 +12,6 @@ from vdb_core.domain.value_objects.strategy import ChunkingStrategyId, ModalityT
 from .chunk_id import ChunkId
 
 if TYPE_CHECKING:
-    from uuid import UUID
-
     from vdb_core.domain.value_objects.common import ContentHash
     from vdb_core.domain.value_objects.library import LibraryId
 
@@ -23,7 +21,6 @@ class Chunk:
     """Immutable chunk content."""
 
     library_id: LibraryId
-    document_id: UUID
     modality: ModalityType
     content: str | bytes  # Type determined by modality
     chunking_strategy_id: ChunkingStrategyId
@@ -43,12 +40,7 @@ class Chunk:
     @property
     def chunk_id(self) -> ChunkId:
         """Computed natural key for this chunk."""
-        return ChunkId.from_content(
-            library_id=self.library_id,
-            document_id=self.document_id,
-            chunking_strategy_id=self.chunking_strategy_id,
-            content=self.content,
-        )
+        return ChunkId.from_content(library_id=self.library_id, content=self.content)
 
     @property
     def text_content(self) -> str:
