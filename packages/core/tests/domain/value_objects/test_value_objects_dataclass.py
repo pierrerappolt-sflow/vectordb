@@ -14,7 +14,6 @@ from vdb_core.domain.value_objects import (
     ModalityType,
     ModalityTypeEnum,
 )
-from vdb_core.domain.value_objects.config import EmbeddingConfig, EmbeddingProvider
 from vdb_core.domain.value_objects.strategy import EmbeddingStrategyId
 from vdb_core.domain.value_objects.library import LibraryId
 from vdb_core.domain.value_objects.document import DocumentFragmentId
@@ -31,7 +30,6 @@ def test_chunk_text_validation_and_id():
         content_hash=ContentHash.from_content("Hello world"),
     )
 
-    # modality TEXT requires str and produces a deterministic id
     assert isinstance(chunk.chunk_id, ChunkId)
     same = Chunk(
         library_id=library_id,
@@ -47,7 +45,6 @@ def test_chunk_text_validation_and_id():
 def test_chunk_binary_validation():
     library_id: LibraryId = uuid4()
 
-    # Non-TEXT must be bytes
     with pytest.raises(TypeError):
         Chunk(
             library_id=library_id,
@@ -100,7 +97,6 @@ def test_embedding_validation_properties():
 
 
 def test_extracted_content_validation():
-    # Minimal sanity: DocumentFragmentId type exists and byte content is required
     frag_id: DocumentFragmentId = uuid4()
 
     from vdb_core.domain.value_objects.document import ExtractedContent
@@ -113,15 +109,5 @@ def test_extracted_content_validation():
             document_offset_start=0,
             document_offset_end=10,
         )
-
-
-def test_embedding_config_dataclass():
-    cfg = EmbeddingConfig(
-        provider=EmbeddingProvider.COHERE,
-        model="embed-english-v3.0",
-        dimension=1024,
-        api_key=None,
-    )
-    assert cfg.dimension == 1024
 
 

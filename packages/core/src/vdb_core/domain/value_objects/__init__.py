@@ -18,7 +18,7 @@ from .chunk import Chunk, ChunkId, ChunkStatus, ChunkStatusEnum, default_chunk_s
 from .common import ContentHash, Status
 
 # Config value objects
-from .config import EmbeddingConfig, EmbeddingProvider, VectorizationConfigId
+from .config import EmbeddingProvider, VectorizationConfigId
 
 # Document value objects
 from .document import (
@@ -102,9 +102,8 @@ __all__ = [
     # Embedding
     "Embedding",
     # Config
-    "EmbeddingConfig",  # Legacy - still used by infrastructure
     "EmbeddingId",
-    "EmbeddingProvider",  # Legacy - still used by infrastructure
+    "EmbeddingProvider",
     "EmbeddingStrategyId",
     "EmbeddingStrategyStatus",
     "EmbeddingStrategyStatusEnum",
