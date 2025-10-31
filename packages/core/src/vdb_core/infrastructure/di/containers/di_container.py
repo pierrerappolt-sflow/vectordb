@@ -13,7 +13,7 @@ from vdb_core.application.repositories import (
     IVectorizationConfigReadRepository,
 )
 from vdb_core.domain.repositories import IEmbeddingReadRepository, ILibraryRepository
-from vdb_core.domain.services import IEmbeddingService, IModalityDetector, IParser
+from vdb_core.domain.services import IModalityDetector, IParser
 from vdb_core.infrastructure.config import AppConfig, load_config_or_default
 from vdb_core.infrastructure.factories import InfrastructureFactory
 from vdb_core.infrastructure.parsers import CompositeParser, ModalityDetector, TextParser
@@ -246,10 +246,10 @@ class DIContainer(BaseContainer):
             # query_read_repository_factory=...,
         )
 
-    def get_embedding_service(self) -> IEmbeddingService:
+    def get_embedding_service(self):  # type: ignore[no-untyped-def]
         """Get the Embedding Service (singleton)."""
 
-        def factory_fn() -> IEmbeddingService:
+        def factory_fn():  # type: ignore[no-untyped-def]
             return InMemoryEmbeddingService()
 
         return self._get_or_create("embedding_service", factory_fn)
