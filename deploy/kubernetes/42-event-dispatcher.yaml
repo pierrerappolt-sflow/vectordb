@@ -1,0 +1,111 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-dispatcher
+  namespace: vdb
+  labels:
+    app: event-dispatcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: event-dispatcher
+  template:
+    metadata:
+      labels:
+        app: event-dispatcher
+    spec:
+      initContainers:
+        # Wait for RabbitMQ to be ready
+        - name: wait-for-rabbitmq
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z rabbitmq 5672; do
+                echo "Waiting for rabbitmq...";
+                sleep 2;
+              done
+        # Wait for Temporal to be ready
+        - name: wait-for-temporal
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z temporal 7233; do
+                echo "Waiting for temporal...";
+                sleep 2;
+              done
+        # Wait for app-postgres to be ready
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h app-postgres -U vdbuser -d vectordb; do
+                echo "Waiting for app-postgres...";
+                sleep 2;
+              done
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vdb-secrets
+                  key: POSTGRES_PASSWORD
+      containers:
+        - name: event-dispatcher
+          image: us-central1-docker.pkg.dev/ci-dev-376017/vdb-images/vdb-worker:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - uv
+            - run
+            - --directory
+            - /workspace/apps/worker
+            - python
+            - -m
+            - vdb_worker.rabbitmq_consumer
+          env:
+            - name: TEMPORAL_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: TEMPORAL_HOST
+            - name: TEMPORAL_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: TEMPORAL_PORT
+            - name: TEMPORAL_NAMESPACE
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: TEMPORAL_NAMESPACE
+            - name: RABBITMQ_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: RABBITMQ_HOST
+            - name: RABBITMQ_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: RABBITMQ_PORT
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vdb-secrets
+                  key: DATABASE_URL
+            - name: CONSUMER_TYPE
+              value: "ingestion"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+      restartPolicy: Always

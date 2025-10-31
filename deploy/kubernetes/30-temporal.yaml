@@ -1,0 +1,126 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: temporal-config
+  namespace: vdb
+data:
+  development-sql.yaml: |
+    # Temporal dynamic configuration for development
+    # Add any Temporal-specific configuration here
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal
+  namespace: vdb
+  labels:
+    app: temporal
+spec:
+  ports:
+    - port: 7233
+      targetPort: 7233
+      name: grpc
+  selector:
+    app: temporal
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal
+  namespace: vdb
+  labels:
+    app: temporal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: temporal
+  template:
+    metadata:
+      labels:
+        app: temporal
+    spec:
+      initContainers:
+        # Wait for temporal-postgres to be ready
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h temporal-postgres -U temporal; do
+                echo "Waiting for temporal-postgres...";
+                sleep 2;
+              done
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vdb-secrets
+                  key: TEMPORAL_POSTGRES_PASSWORD
+      containers:
+        - name: temporal
+          image: temporalio/auto-setup:1.22.4
+          ports:
+            - containerPort: 7233
+              name: grpc
+          env:
+            - name: DB
+              value: "postgresql"
+            - name: DB_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: TEMPORAL_POSTGRES_USER
+            - name: POSTGRES_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: vdb-secrets
+                  key: TEMPORAL_POSTGRES_PASSWORD
+            - name: POSTGRES_SEEDS
+              value: "temporal-postgres"
+            - name: DYNAMIC_CONFIG_FILE_PATH
+              value: "/etc/temporal/config/dynamicconfig/development-sql.yaml"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/temporal/config/dynamicconfig
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            exec:
+              command:
+                - tctl
+                - --address
+                - temporal:7233
+                - cluster
+                - health
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 10
+          readinessProbe:
+            exec:
+              command:
+                - tctl
+                - --address
+                - temporal:7233
+                - cluster
+                - health
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+      volumes:
+        - name: config
+          configMap:
+            name: temporal-config

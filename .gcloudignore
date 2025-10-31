@@ -1,0 +1,21 @@
+# Exclude common development files but keep build dependencies
+.git/
+.gitignore
+**/node_modules/
+**/.venv/
+**/__pycache__/
+*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+.env
+**/.DS_Store
+**/.terraform/
+**/*.tfstate*
+**/.next/
+**/dist/
+**/build/
+
+# Keep these for build
+!uv.lock
+!**/pyproject.toml

@@ -1,0 +1,124 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: vdb
+data:
+  # Note: Add your actual init scripts here from scripts/*.sql
+  # For now, this is a placeholder. You'll need to add the actual SQL content
+  # or mount these from a different source (e.g., from your repo via initContainers)
+  init-note.txt: |
+    IMPORTANT: Mount your SQL init scripts here or use an initContainer to copy them.
+    Required scripts:
+    - scripts/init-db.sql
+    - scripts/init-vector-tables.sql
+    - scripts/migrations/001_create_domain_tables.sql
+    - scripts/migrations/002_create_strategy_tables.sql
+    - scripts/migrations/003_create_event_logs_table.sql
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-postgres
+  namespace: vdb
+  labels:
+    app: app-postgres
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  clusterIP: None
+  selector:
+    app: app-postgres
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: app-postgres
+  namespace: vdb
+  labels:
+    app: app-postgres
+spec:
+  serviceName: app-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app-postgres
+  template:
+    metadata:
+      labels:
+        app: app-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vdb-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            # Uncomment and configure when you add actual init scripts
+            # - name: init-scripts
+            #   mountPath: /docker-entrypoint-initdb.d
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - vdbuser
+                - -d
+                - vectordb
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - vdbuser
+                - -d
+                - vectordb
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: app-postgres-data
+        # Uncomment when you configure init scripts
+        # - name: init-scripts
+        #   configMap:
+        #     name: postgres-init-scripts

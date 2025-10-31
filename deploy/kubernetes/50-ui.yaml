@@ -1,0 +1,96 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui
+  namespace: vdb
+  labels:
+    app: ui
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
+  selector:
+    app: ui
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui
+  namespace: vdb
+  labels:
+    app: ui
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ui
+  template:
+    metadata:
+      labels:
+        app: ui
+    spec:
+      initContainers:
+        # Wait for API to be ready
+        - name: wait-for-api
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z api 80; do
+                echo "Waiting for api...";
+                sleep 2;
+              done
+      containers:
+        - name: ui
+          image: us-central1-docker.pkg.dev/ci-dev-376017/vdb-images/vdb-ui:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: "https://api.pierrestack.com"
+            - name: API_INTERNAL_URL
+              value: "http://api:80"
+            - name: NEXT_PUBLIC_TEMPORAL_UI_URL
+              value: "https://temporal.pierrestack.com"
+            - name: TEMPORAL_UI_HOST
+              value: "http://temporal-ui:8080"
+            - name: DATABASE_UI_HOST
+              value: "http://pgweb:8081"
+            - name: RABBITMQ_UI_HOST
+              value: "http://rabbitmq:15672"
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: NODE_ENV
+            - name: NEXT_TELEMETRY_DISABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: NEXT_TELEMETRY_DISABLED
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5

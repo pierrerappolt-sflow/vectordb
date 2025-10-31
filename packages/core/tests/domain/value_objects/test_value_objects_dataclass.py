@@ -12,7 +12,7 @@ from vdb_core.domain.value_objects import (
     Embedding,
     EmbeddingId,
     ModalityType,
-    ModalityTypeEnum,
+    ModalityType,
 )
 from vdb_core.domain.value_objects.strategy import EmbeddingStrategyId
 from vdb_core.domain.value_objects.library import LibraryId
@@ -24,7 +24,7 @@ def test_chunk_text_validation_and_id():
 
     chunk = Chunk(
         library_id=library_id,
-        modality=ModalityType(ModalityTypeEnum.TEXT),
+        modality=ModalityType.TEXT,
         content="Hello world",
         chunking_strategy_id=None,  # type: ignore[arg-type]
         content_hash=ContentHash.from_content("Hello world"),
@@ -33,7 +33,7 @@ def test_chunk_text_validation_and_id():
     assert isinstance(chunk.chunk_id, ChunkId)
     same = Chunk(
         library_id=library_id,
-        modality=ModalityType(ModalityTypeEnum.TEXT),
+        modality=ModalityType.TEXT,
         content="Hello world",
         chunking_strategy_id=None,  # type: ignore[arg-type]
         content_hash=ContentHash.from_content("Hello world"),
@@ -48,7 +48,7 @@ def test_chunk_binary_validation():
     with pytest.raises(TypeError):
         Chunk(
             library_id=library_id,
-            modality=ModalityType(ModalityTypeEnum.IMAGE),
+            modality=ModalityType(ModalityType.IMAGE),
             content="not-bytes",  # type: ignore[arg-type]
             chunking_strategy_id=None,  # type: ignore[arg-type]
             content_hash=ContentHash.from_content("x"),
@@ -56,7 +56,7 @@ def test_chunk_binary_validation():
 
     img = Chunk(
         library_id=library_id,
-        modality=ModalityType(ModalityTypeEnum.IMAGE),
+        modality=ModalityType(ModalityType.IMAGE),
         content=b"\xff\xd8\xff\xdb",
         chunking_strategy_id=None,  # type: ignore[arg-type]
         content_hash=ContentHash.from_bytes(b"\xff\xd8\xff\xdb"),
@@ -70,7 +70,7 @@ def test_embedding_validation_properties():
 
     chunk = Chunk(
         library_id=library_id,
-        modality=ModalityType(ModalityTypeEnum.TEXT),
+        modality=ModalityType.TEXT,
         content="abc",
         chunking_strategy_id=None,  # type: ignore[arg-type]
         content_hash=ContentHash.from_content("abc"),
@@ -104,7 +104,7 @@ def test_extracted_content_validation():
     with pytest.raises(TypeError):
         ExtractedContent(  # type: ignore[call-arg]
             content="not-bytes",
-            modality=ModalityType(ModalityTypeEnum.TEXT),
+            modality=ModalityType.TEXT,
             source_fragments=[(frag_id, 0, 10)],
             document_offset_start=0,
             document_offset_end=10,

@@ -1,16 +1,18 @@
 """Tests for IEntity base class."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from vdb_core.domain.entities import IEntity
+from vdb_core.domain.value_objects import DocumentId, LibraryId
 
 
 @dataclass(slots=True, kw_only=True, eq=False)
 class SampleEntity(IEntity):
     """Sample entity for testing IEntity behavior."""
 
+    id: LibraryId = field(default_factory=uuid4, init=False)
     name: str
 
 
@@ -88,6 +90,7 @@ def test_entity_different_types_not_equal() -> None:
 
     @dataclass(slots=True, kw_only=True, eq=False)
     class AnotherEntity(IEntity):
+        id: DocumentId = field(default_factory=uuid4, init=False)
         value: int
 
     entity1 = SampleEntity(name="test")

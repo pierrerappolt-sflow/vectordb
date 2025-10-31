@@ -102,7 +102,7 @@ class DIContainer(BaseContainer):
 
                 return self.factory.create_library_read_repository(write_storage=_SHARED_LIBRARY_STORAGE)
             # Postgres/other: read repository creates its own connection pool
-            return self.factory.create_library_read_repository(library_storage=None)
+            return self.factory.create_library_read_repository(write_storage=None)
 
         return self._get_or_create("library_read_repository", factory_fn)
 

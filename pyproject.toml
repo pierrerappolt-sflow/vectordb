@@ -2,7 +2,8 @@
 members = [
     "packages/core",
     "apps/api",
-    "apps/sdk"
+    "apps/worker",
+    "apps/search-service"
 ]
 
 [tool.uv]
@@ -20,7 +21,7 @@ dev-dependencies = [
 [tool.ruff]
 line-length = 120
 indent-width = 4
-target-version = "py313"
+target-version = "py312"
 exclude = [
     ".bzr",
     ".direnv",
@@ -53,10 +54,64 @@ exclude = [
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-    "D203",   # one-blank-line-before-class (conflicts with D211)
-    "D213",   # multi-line-summary-second-line (conflicts with D212)
-    "COM812", # missing-trailing-comma (conflicts with formatter)
-    "ISC001", # single-line-implicit-string-concatenation (conflicts with formatter)
+    "D203",     # one-blank-line-before-class (conflicts with D211)
+    "D213",     # multi-line-summary-second-line (conflicts with D212)
+    "COM812",   # missing-trailing-comma (conflicts with formatter)
+    "ISC001",   # single-line-implicit-string-concatenation (conflicts with formatter)
+    "ERA001",   # commented-out-code (false positives: examples, category headers)
+    "FIX002",   # line-contains-todo (TODOs are tracked, not actionable by linter)
+    "TD003",    # missing-todo-link (not all TODOs need issue links)
+    "PLC0415",  # import-outside-top-level (intentional for circular deps & lazy loading)
+    "ANN401",   # any-type (sometimes needed for generic/dynamic code)
+    "SLF001",   # private-member-access (needed for testing & framework internals)
+    "D401",     # non-imperative-mood (too strict for docstrings)
+    "D105",     # undocumented-magic-method (not all magic methods need docs)
+    "D107",     # undocumented-public-init (init params documented in class docstring)
+    "PLR0915",  # too-many-statements (arbitrary limit)
+    "PLR0911",  # too-many-return-statements (arbitrary limit)
+    "PLR0913",  # too-many-arguments (sometimes needed for commands/queries)
+    "C901",     # complex-structure (arbitrary complexity limit)
+    "TRY401",   # verbose-log-message (exception info in logs is helpful)
+    "ARG001",   # unused-function-argument (common in callbacks/fixtures)
+    "ARG002",   # unused-method-argument (common in abstract methods/protocols)
+    "PERF401",  # manual-list-comprehension (not always more readable)
+    "PTH123",   # builtin-open (pathlib not always better)
+    "ASYNC230", # blocking-open-call (async file I/O not always needed)
+    "BLE001",   # blind-except (sometimes catching all exceptions is intentional)
+    "TRY400",   # error-instead-of-exception (logging.error is fine)
+    "E501",     # line-too-long (sometimes unavoidable with long strings/types)
+    "ANN001",   # missing-type-function-argument (gradual typing, will add over time)
+    "ANN201",   # missing-return-type-undocumented (gradual typing)
+    "ANN202",   # missing-return-type-private (private functions don't always need types)
+    "A002",     # builtin-argument-shadowing (id, type, format often intentional)
+    "TC001",    # typing-only-first-party-import (too pedantic)
+    "TC004",    # runtime-import-in-type-checking-block (sometimes needed)
+    "PLW0603",  # global-statement (sometimes necessary for singletons/state)
+    "FBT001",   # boolean-type-hint-positional-argument (bools in APIs are fine)
+    "N818",     # error-suffix-on-exception-name (not always needed)
+    "RUF012",   # mutable-class-default (dataclasses handle this correctly)
+    "S104",     # hardcoded-bind-all-interfaces (0.0.0.0 is standard for containers)
+    "TRY300",   # try-consider-else (not always more readable)
+    "B017",     # assert-raises-exception (pytest.raises is fine)
+    "C408",     # unnecessary-collection-call (dict() can be clearer than {})
+    "D104",     # undocumented-public-package (not all __init__.py need docs)
+    "EM102",    # f-string-in-exception (f-strings are fine in exceptions)
+    "EXE001",   # shebang-not-executable (not all scripts need +x)
+    "G201",     # logging-exc-info (exc_info parameter is fine)
+    "PLR0912",  # too-many-branches (arbitrary limit)
+    "RET504",   # unnecessary-assign (sometimes clearer with intermediate variable)
+    "RUF022",   # unsorted-dunder-all (alphabetical not always best order)
+    "TD002",    # missing-todo-author (not all TODOs need authors)
+    "TC003",    # typing-only-standard-library-import (too strict)
+    "TRY004",   # type-check-without-type-error (ValueError is sometimes correct)
+    "SIM102",   # collapsible-if (not always more readable)
+    "S107",     # hardcoded-password-default (guest/guest are standard RabbitMQ defaults)
+    "B904",     # raise-without-from-inside-except (not always needed)
+    "PLR2004",  # magic-value-comparison (not all magic values need constants)
+    "SIM105",   # suppressible-exception (try-except-pass can be clearer)
+    "S110",     # try-except-pass (sometimes intentional)
+    "TRY003",   # raise-vanilla-args (long exception messages are fine)
+    "RUF043",   # pytest-raises-ambiguous-pattern (regex in pytest.raises is fine)
 ]
 fixable = ["ALL"]
 unfixable = []
@@ -66,6 +121,13 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 "**/tests/**/*.py" = [
     "S101",     # Use of assert (expected in tests)
     "PLR2004",  # Magic values (expected in tests)
+    "B904",     # raise-without-from (not critical in tests)
+    "S603",     # subprocess-without-shell-equals-true (docker-compose in tests)
+    "S607",     # start-process-with-partial-path (docker-compose in tests)
+    "PT011",    # pytest-raises-too-broad (sometimes intentional)
+]
+"**/models/*_model.py" = [
+    "F821",     # SQLAlchemy forward references (Mapped["ModelName"])
 ]
 
 [tool.ruff.format]
@@ -75,8 +137,16 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.12"
 strict = true
+
+[[tool.mypy.overrides]]
+module = "asyncpg.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "vdb_core.domain.entities.library.chunk"
+ignore_missing_imports = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
@@ -93,3 +163,6 @@ testpaths = [
     "apps/sdk/tests",
 ]
 python_files = ["*_test.py", "test_*.py"]
+markers = [
+    "integration: Integration tests that require external services (e.g., Cohere API)",
+]

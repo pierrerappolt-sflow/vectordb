@@ -1,0 +1,114 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-worker
+  namespace: vdb
+  labels:
+    app: search-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: search-worker
+  template:
+    metadata:
+      labels:
+        app: search-worker
+    spec:
+      initContainers:
+        # Wait for app-postgres to be ready
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h app-postgres -U vdbuser -d vectordb; do
+                echo "Waiting for app-postgres...";
+                sleep 2;
+              done
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vdb-secrets
+                  key: POSTGRES_PASSWORD
+        # Wait for Temporal to be ready
+        - name: wait-for-temporal
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z temporal 7233; do
+                echo "Waiting for temporal...";
+                sleep 2;
+              done
+        # Wait for search service to be ready
+        - name: wait-for-search
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z search 8001; do
+                echo "Waiting for search service...";
+                sleep 2;
+              done
+      containers:
+        - name: search-worker
+          image: us-central1-docker.pkg.dev/ci-dev-376017/vdb-images/vdb-worker:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - uv
+            - run
+            - --directory
+            - /workspace/apps/worker
+            - python
+            - -m
+            - vdb_worker.search_worker
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vdb-secrets
+                  key: DATABASE_URL
+            - name: TEMPORAL_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: TEMPORAL_HOST
+            - name: TEMPORAL_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: TEMPORAL_PORT
+            - name: TEMPORAL_NAMESPACE
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: TEMPORAL_NAMESPACE
+            - name: WORKER_TASK_QUEUE
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: SEARCH_WORKER_TASK_QUEUE
+            - name: COHERE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vdb-secrets
+                  key: COHERE_API_KEY
+            - name: SEARCH_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: vdb-config
+                  key: SEARCH_SERVICE_URL
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+      restartPolicy: Always

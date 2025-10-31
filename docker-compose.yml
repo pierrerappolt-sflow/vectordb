@@ -1,0 +1,362 @@
+# ==================== Architecture Overview ====================
+#
+# Pipeline Orchestration: Temporal workflows handle document processing
+#   - ingestion_workflow.py: modality detection → chunking → embedding → indexing
+#   - search_workflow.py: query embedding → vector search → result enrichment
+#
+# Domain Events: RabbitMQ publishes domain events for observability
+#   - LibraryCreated, DocumentUploaded, ChunkProcessed, etc.
+#   - event-log-consumer stores events for auditing
+#
+# Databases:
+#   - temporal-postgres: Temporal's workflow state
+#   - app-postgres: Application data + pgvector embeddings
+#
+# ==================== Services ====================
+
+services:
+  # ==================== Databases ====================
+
+  # Temporal's internal database
+  temporal-postgres:
+    image: postgres:16-alpine
+    container_name: vdb-temporal-postgres
+    environment:
+      POSTGRES_DB: temporal
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    ports:
+      - "5434:5432"  # Expose on different port to avoid conflicts
+    volumes:
+      - temporal-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vdb-network
+
+  # Application database
+  app-postgres:
+    image: postgres:16-alpine
+    container_name: vdb-app-postgres
+    command: postgres -c max_connections=200
+    environment:
+      POSTGRES_DB: vectordb
+      POSTGRES_USER: vdbuser
+      POSTGRES_PASSWORD: vdbpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - app-postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./scripts/init-vector-tables.sql:/docker-entrypoint-initdb.d/02-init-vector-tables.sql
+      - ./scripts/migrations/001_create_domain_tables.sql:/docker-entrypoint-initdb.d/03-migration-001.sql
+      - ./scripts/migrations/002_create_strategy_tables.sql:/docker-entrypoint-initdb.d/04-migration-002.sql
+      - ./scripts/migrations/003_create_event_logs_table.sql:/docker-entrypoint-initdb.d/05-migration-003.sql
+      - ./scripts/migrations/004_refactor_vectorization_configs.sql:/docker-entrypoint-initdb.d/06-migration-004.sql
+      - ./scripts/migrations/005_remove_library_id_from_strategies.sql:/docker-entrypoint-initdb.d/07-migration-005.sql
+      - ./scripts/migrations/006_add_extracted_contents_columns.sql:/docker-entrypoint-initdb.d/08-migration-006.sql
+      - ./scripts/migrations/007_create_queries_table.sql:/docker-entrypoint-initdb.d/09-migration-007.sql
+      # - ./scripts/migrations/008_create_embeddings_table.sql:/docker-entrypoint-initdb.d/10-migration-008.sql
+      - ./scripts/migrations/009_allow_null_provider_in_embedding_strategies.sql:/docker-entrypoint-initdb.d/11-migration-009.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vdbuser -d vectordb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vdb-network
+
+  # ==================== Message Queue ====================
+
+  # RabbitMQ for domain events ONLY (NOT pipeline orchestration)
+  # Used for: event logging, audit trails, inter-service communication
+  rabbitmq:
+    image: rabbitmq:4.0-management
+    container_name: vdb-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"    # AMQP port
+      - "15672:15672"  # Management UI
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vdb-network
+
+  # ==================== Temporal Services ====================
+
+  # Temporal server
+  temporal:
+    image: temporalio/auto-setup:1.22.4
+    container_name: vdb-temporal
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-postgres
+      - DYNAMIC_CONFIG_FILE_PATH=/etc/temporal/config/dynamicconfig/development-sql.yaml
+    ports:
+      - "7233:7233"  # Temporal gRPC
+    volumes:
+      - ./temporal-config:/etc/temporal/config/dynamicconfig
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - vdb-network
+
+  # Temporal Web UI
+  temporal-ui:
+    image: temporalio/ui:2.21.3
+    container_name: vdb-temporal-ui
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+      - TEMPORAL_AUTH_ENABLED=false
+      - TEMPORAL_UI_ENABLED=true
+    ports:
+      - "8080:8080"  # Temporal UI
+    networks:
+      - vdb-network
+
+  # ==================== Application Services ====================
+
+  # FastAPI backend server
+  api:
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+      target: development
+    container_name: vdb-api
+    depends_on:
+      app-postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://vdbuser:vdbpass@app-postgres:5432/vectordb
+      - TEMPORAL_HOST=temporal
+      - TEMPORAL_PORT=7233
+      - TEMPORAL_NAMESPACE=default
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/api:/workspace/apps/api
+      - ./packages:/workspace/packages
+      - ./config.yaml:/workspace/config.yaml:ro
+    networks:
+      - vdb-network
+
+  # Temporal worker (executes event handlers as activities)
+  worker:
+    build:
+      context: .
+      dockerfile: ./apps/worker/Dockerfile
+    container_name: vdb-worker
+    depends_on:
+      app-postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+      search:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgresql://vdbuser:vdbpass@app-postgres:5432/vectordb
+      - TEMPORAL_HOST=temporal
+      - TEMPORAL_PORT=7233
+      - TEMPORAL_NAMESPACE=default
+      - WORKER_TASK_QUEUE=vdb-tasks
+      - COHERE_API_KEY=${COHERE_API_KEY}
+      - SEARCH_SERVICE_URL=http://search:8001
+    volumes:
+      - ./apps/worker:/workspace/apps/worker
+      - ./packages:/workspace/packages
+      - ./config.yaml:/workspace/config.yaml:ro
+    networks:
+      - vdb-network
+    restart: on-failure
+
+  # Dedicated search worker (executes SearchWorkflow and search activities)
+  search-worker:
+    build:
+      context: .
+      dockerfile: ./apps/worker/Dockerfile
+    container_name: vdb-search-worker
+    depends_on:
+      app-postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+      search:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgresql://vdbuser:vdbpass@app-postgres:5432/vectordb
+      - TEMPORAL_HOST=temporal
+      - TEMPORAL_PORT=7233
+      - TEMPORAL_NAMESPACE=default
+      - WORKER_TASK_QUEUE=vdb-search-tasks
+      - COHERE_API_KEY=${COHERE_API_KEY}
+      - SEARCH_SERVICE_URL=http://search:8001
+    command: ["uv", "run", "--directory", "/workspace/apps/worker", "python", "-m", "vdb_worker.search_worker"]
+    volumes:
+      - ./apps/worker:/workspace/apps/worker
+      - ./packages:/workspace/packages
+      - ./config.yaml:/workspace/config.yaml:ro
+    networks:
+      - vdb-network
+    restart: on-failure
+
+  # Event dispatcher (bridges RabbitMQ events → Temporal workflows)
+  event-dispatcher:
+    build:
+      context: .
+      dockerfile: ./apps/worker/Dockerfile
+    container_name: vdb-event-dispatcher
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+      app-postgres:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_HOST=temporal
+      - TEMPORAL_PORT=7233
+      - TEMPORAL_NAMESPACE=default
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - DATABASE_URL=postgresql://vdbuser:vdbpass@app-postgres:5432/vectordb
+      - CONSUMER_TYPE=ingestion
+    command: ["uv", "run", "--directory", "/workspace/apps/worker", "python", "-m", "vdb_worker.rabbitmq_consumer"]
+    volumes:
+      - ./apps/worker:/workspace/apps/worker
+      - ./packages:/workspace/packages
+    networks:
+      - vdb-network
+    restart: on-failure
+
+  # Event Log Consumer (Domain events observability)
+  event-log-consumer:
+    build:
+      context: .
+      dockerfile: ./apps/worker/Dockerfile
+    container_name: vdb-event-log
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      app-postgres:
+        condition: service_healthy
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - DATABASE_URL=postgresql://vdbuser:vdbpass@app-postgres:5432/vectordb
+    command: ["uv", "run", "--directory", "/workspace/apps/worker", "python", "-m", "vdb_worker.event_log_consumer"]
+    volumes:
+      - ./apps/worker:/workspace/apps/worker
+      - ./packages:/workspace/packages
+    networks:
+      - vdb-network
+    restart: on-failure
+    deploy:
+      replicas: 1  # Single instance sufficient for event logging
+
+  # Vector Search Service (PyTorch in-memory indices)
+  search:
+    build:
+      context: .
+      dockerfile: ./apps/search-service/Dockerfile
+      target: development
+    container_name: vdb-search
+    depends_on:
+      app-postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://vdbuser:vdbpass@app-postgres:5432/vectordb
+      - API_HOST=0.0.0.0
+      - API_PORT=8001
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./apps/search-service:/workspace/apps/search-service
+      - ./packages:/workspace/packages
+      - ./pyproject.toml:/workspace/pyproject.toml:ro
+    networks:
+      - vdb-network
+    restart: on-failure
+
+  # Next.js UI
+  ui:
+    build:
+      context: .
+      dockerfile: ./apps/ui/Dockerfile
+      target: development
+    container_name: vdb-ui
+    depends_on:
+      - api
+      - temporal-ui
+      - pgweb
+      - rabbitmq
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - API_INTERNAL_URL=http://api:8000
+      - NEXT_PUBLIC_TEMPORAL_UI_URL=http://localhost:8080
+      - TEMPORAL_UI_HOST=http://temporal-ui:8080
+      - DATABASE_UI_HOST=http://pgweb:8081
+      - RABBITMQ_UI_HOST=http://rabbitmq:15672
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/ui:/app
+      - /app/node_modules
+      - /app/.next
+      - ./README.md:/README.md
+    networks:
+      - vdb-network
+
+  # Database UI (pgweb)
+  pgweb:
+    image: sosedoff/pgweb:latest
+    container_name: vdb-pgweb
+    depends_on:
+      - app-postgres
+    ports:
+      - "8081:8081"  # Access at http://localhost:8081
+    environment:
+      - DATABASE_URL=postgres://vdbuser:vdbpass@app-postgres:5432/vectordb?sslmode=disable
+    networks:
+      - vdb-network
+
+# ==================== Volumes ====================
+volumes:
+  temporal-postgres-data:
+    driver: local
+  app-postgres-data:
+    driver: local
+  rabbitmq-data:
+    driver: local
+
+# ==================== Networks ====================
+networks:
+  vdb-network:
+    driver: bridge

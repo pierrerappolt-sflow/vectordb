@@ -1,0 +1,37 @@
+# VDB Configuration
+# This file controls which implementations are used for infrastructure dependencies
+
+infrastructure:
+  # Storage backend for write operations (UnitOfWork, Repositories)
+  # Options: "inmemory", "duckdb", "postgres"
+  storage:
+    type: "postgres"
+    # Connection settings (only used for duckdb/postgres)
+    # database_url is read from DATABASE_URL environment variable
+    # pool_size: 10
+
+  # Message bus for routing domain events to handlers
+  # Options: "inmemory", "rabbitmq", "kafka"
+  message_bus:
+    type: "rabbitmq"
+    broker_url: "amqp://guest:guest@rabbitmq:5672/"  # Use rabbitmq hostname in Docker
+
+  # Read models for CQRS query side
+  # Options: "inmemory", "duckdb", "postgres", "redis"
+  # Can be different from write storage for CQRS optimization
+  read_models:
+    type: "postgres"
+    # database_url: "duckdb:///./vdb_read.db"
+
+# Application settings
+application:
+  # Whether to use the same storage for reads and writes
+  # If true, read_models.type is ignored and storage.type is used
+  shared_read_write_storage: true
+
+# API settings
+api:
+  host: "0.0.0.0"
+  port: 8000
+  reload: true
+  log_level: "info"

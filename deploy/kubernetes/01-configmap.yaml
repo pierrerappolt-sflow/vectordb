@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vdb-config
+  namespace: vdb
+data:
+  # Database Configuration
+  POSTGRES_DB: "vectordb"
+  POSTGRES_USER: "vdbuser"
+  TEMPORAL_POSTGRES_DB: "temporal"
+  TEMPORAL_POSTGRES_USER: "temporal"
+
+  # Temporal Configuration
+  TEMPORAL_HOST: "temporal"
+  TEMPORAL_PORT: "7233"
+  TEMPORAL_NAMESPACE: "default"
+  WORKER_TASK_QUEUE: "vdb-tasks"
+  SEARCH_WORKER_TASK_QUEUE: "vdb-search-tasks"
+
+  # RabbitMQ Configuration
+  RABBITMQ_HOST: "rabbitmq"
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_DEFAULT_USER: "guest"
+
+  # Database URLs (non-sensitive parts)
+  DATABASE_HOST: "app-postgres"
+  DATABASE_PORT: "5432"
+  TEMPORAL_DATABASE_HOST: "temporal-postgres"
+  TEMPORAL_DATABASE_PORT: "5432"
+
+  # Search Service
+  SEARCH_SERVICE_URL: "http://search:8001"
+
+  # Application Settings
+  API_HOST: "0.0.0.0"
+  API_PORT: "8001"
+  NODE_ENV: "production"
+  NEXT_TELEMETRY_DISABLED: "1"

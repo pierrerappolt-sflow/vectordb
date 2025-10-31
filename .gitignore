@@ -52,3 +52,32 @@ dmypy.json
 
 # Ruff
 .ruff_cache/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Next.js
+.next/
+out/
+
+# Sample data cache
+apps/ui/.cache/
+
+# Environment variables
+.env*.local
+.env.deploy
+.env.prod
+
+# Kubernetes secrets (local testing only)
+deploy/kubernetes/*-secrets-minikube.yaml
+
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/.terraform.tfstate.lock.info
