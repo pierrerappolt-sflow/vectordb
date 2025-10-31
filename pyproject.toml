@@ -2,8 +2,7 @@
 members = [
     "packages/core",
     "apps/api",
-    "apps/worker",
-    "apps/search-service"
+    "apps/worker"
 ]
 
 [tool.uv]

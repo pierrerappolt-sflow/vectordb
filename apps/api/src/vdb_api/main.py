@@ -79,7 +79,7 @@ def create_app() -> FastAPI:
     # Configure CORS - allow all origins for development
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=r".*",  # Allow all origins using regex
+        allow_origins=["*"],  # Allow all origins
         allow_credentials=True,
         allow_methods=["*"],  # Allow all HTTP methods
         allow_headers=["*"],  # Allow all headers
