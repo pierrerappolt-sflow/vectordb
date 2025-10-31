@@ -247,21 +247,9 @@ class DIContainer(BaseContainer):
         )
 
     def get_embedding_service(self) -> IEmbeddingService:
-        """Get the Embedding Service (singleton).
-
-        Uses CohereEmbeddingService for real semantic embeddings.
-        Falls back to InMemoryEmbeddingService if COHERE_API_KEY not set.
-        """
+        """Get the Embedding Service (singleton)."""
 
         def factory_fn() -> IEmbeddingService:
-            import os
-
-            from vdb_core.infrastructure.services import CohereEmbeddingService
-
-            api_key = os.getenv("COHERE_API_KEY")
-            if api_key:
-                return CohereEmbeddingService(api_key)
-
             return InMemoryEmbeddingService()
 
         return self._get_or_create("embedding_service", factory_fn)
